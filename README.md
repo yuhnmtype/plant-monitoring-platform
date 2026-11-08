@@ -8,7 +8,7 @@ A generic monitoring platform for industrial plants, built and evaluated entirel
 
 | Milestone | Scope | Status |
 |---|---|---|
-| M0 | Decisions, evaluation criteria, repo skeleton | In progress |
+| M0 | Decisions, evaluation criteria, repo skeleton | Done |
 | M1 | Simulator to database to one chart | Not started |
 | M2 | Schema, indexes, data-quality checks, profile 2 | Not started |
 | M3 | Statistical detection and frozen evaluation | Not started |
