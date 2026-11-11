@@ -8,3 +8,7 @@ Triage questions for every new idea:
 
 | Idea | Gap | Hours | What gets cut | Outcome (replace / buffer / Future work) |
 |---|---|---|---|---|
+| `follows`: lag | None named; simulator realism only | About 2 (estimate) | Nothing while it stays in Future work | Future work |
+| `follows`: integrator relation (tank level = integral of inflow minus outflow) | None named; simulator realism only | About 4 (estimate) | Nothing while it stays in Future work | Future work |
+
+Free-form formulas in `follows` are not planned.

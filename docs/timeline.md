@@ -46,11 +46,22 @@ Must:
 - Seeded simulator, ingestion into PostgreSQL, one chart, one command. A minimal compose file starts only the database (ADR 0001).
 - Regime or state information as a generic, optional context channel in the core (ADR 0006).
 - Import smoke test in the project venv for every chosen library, then pin versions.
+- Incident schedule with labels and a validator for P2; no injection into signals yet (moved to M3).
+- Generic cross-sensor coupling (`follows`, linear) with a physical and a reported layer; profile 1 uses three relations.
+- Real gap between splits and a separate daily phase per independent source.
 - Check that the proposed P2 incident counts and the sampling interval are feasible.
 - Create the tag `eval-criteria-v1` after the author confirms the frozen values, before any detector runs on validation or test data.
 
 If time:
 - Seasonality in the simulator.
+- Inject drift, stuck sensor and replayed data.
+
+## M3 (28-29 Nov)
+
+Carried over from M1:
+- Inject the 7 incident classes into the signals, as the first must item (moved from M1; anything already injected as an M1 if-time item is not repeated).
+
+The other M3 must and if-time items are written in its spec before the milestone starts.
 
 ## M6 (9-10 Jan)
 
