@@ -1,0 +1,96 @@
+# Fictional plant. All data is simulated and every number here is invented for the simulation.
+profile:
+  id: water_treatment
+  name: Fictional water-treatment plant
+  simulated: true
+
+sampling:
+  interval_minutes: 15
+
+# Split lengths come from P1 in docs/evaluation-criteria-v1.md. The start date is arbitrary.
+run:
+  start: 2025-01-01
+  # Whole days between consecutive splits. Gap samples are not generated into any output or stored.
+  split_gap_days: 7
+  split_months:
+    train: 12
+    validation: 3
+    test: 3
+
+assets:
+  - {id: intake_pump, name: Intake pump, kind: pump}
+  - {id: outlet_valve, name: Outlet valve, kind: valve}
+  - {id: clear_tank, name: Clear-water tank, kind: tank}
+
+# kind is one of: measurement, command, position.
+# follows: physical value = offset + gain x the source's physical value at the same timestamp.
+# measurement_noise_std: independent noise added to the reported value only (default 0).
+# daily_phase_hours: delays the daily cycle of an independent signal (default 0).
+# gain, offset, measurement_noise_std and daily_phase_hours are arbitrary simulation settings,
+# not plant measurements.
+sensors:
+  - id: pump_command
+    asset: intake_pump
+    kind: command
+    unit: percent
+    nominal_range: [40, 100]
+    signal: {base: 70, daily_amplitude: 15, daily_phase_hours: 0, noise_std: 1.0, ar1: 0.8}
+  - id: pump_flow
+    asset: intake_pump
+    kind: measurement
+    unit: m3/h
+    nominal_range: [100, 300]
+    follows: {source: pump_command, gain: 2.7, offset: 11.0}
+    measurement_noise_std: 3.0
+  - id: pump_pressure
+    asset: intake_pump
+    kind: measurement
+    unit: bar
+    nominal_range: [2, 6]
+    follows: {source: pump_command, gain: 0.03, offset: 1.9}
+    measurement_noise_std: 0.05
+  - id: valve_position
+    asset: outlet_valve
+    kind: position
+    unit: percent
+    nominal_range: [20, 90]
+    signal: {base: 55, daily_amplitude: 10, daily_phase_hours: 8, noise_std: 1.0, ar1: 0.8}
+  - id: outlet_flow
+    asset: outlet_valve
+    kind: measurement
+    unit: m3/h
+    nominal_range: [100, 300]
+    follows: {source: valve_position, gain: 4.0, offset: -25.0}
+    measurement_noise_std: 3.0
+  - id: tank_level
+    asset: clear_tank
+    kind: measurement
+    unit: m
+    nominal_range: [1, 5]
+    signal: {base: 3, daily_amplitude: 0.5, daily_phase_hours: 16, noise_std: 0.05, ar1: 0.95}
+
+# Optional context channel (ADR 0006). This profile has no operating states, so it defines none.
+# A profile with states would add, for example:
+# context:
+#   states: [alpha, beta]
+#   schedule: {daily_hours: {alpha: [0, 12], beta: [12, 24]}}
+# and give a sensor signal an offset per state: state_offset: {alpha: 0, beta: 10}
+
+incident_schedule:
+  min_per_class: 5          # P2
+  max_anomalous_share: 0.10 # P2
+  # Minimum from docs/evaluation-criteria-v1.md section 1. May be raised before any detector runs
+  # (record it in the deviations log).
+  boundary_margin_hours: 48
+  # Keeps one alarm from spanning two incidents, which would inflate recall (criteria section 5).
+  min_gap_hours: 24
+
+# Patterns are in docs/problem-brief.md section 4. Injection targets are added in M3.
+incident_classes:
+  - {id: sensor_drift, type: fault, duration_hours: [2, 8]}
+  - {id: stuck_sensor, type: fault, duration_hours: [2, 8]}
+  - {id: weak_pump, type: fault, duration_hours: [2, 8]}
+  - {id: valve_fault, type: fault, duration_hours: [2, 8]}
+  - {id: manipulated_readings, type: attack, duration_hours: [2, 8]}
+  - {id: manipulated_commands, type: attack, duration_hours: [2, 8]}
+  - {id: replayed_data, type: attack, duration_hours: [2, 8]}

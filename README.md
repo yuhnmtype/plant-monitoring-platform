@@ -9,7 +9,7 @@ A generic monitoring platform for industrial plants, built and evaluated entirel
 | Milestone | Scope | Status |
 |---|---|---|
 | M0 | Decisions, evaluation criteria, repo skeleton | Done |
-| M1 | Simulator to database to one chart | Not started |
+| M1 | Simulator to database to one chart | In progress |
 | M2 | Schema, indexes, data-quality checks, profile 2 | Not started |
 | M3 | Statistical detection and frozen evaluation | Not started |
 | M4 | ML method and public-benchmark evaluation | Not started |
@@ -22,7 +22,15 @@ Allowed values: Not started / In progress / Done. CV bullets are written only fo
 
 ## How to run
 
-TBD
+Needs Python 3.15 and a running Docker. In Windows PowerShell, from the repo root:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m plantmon demo --profile water_treatment
+```
+
+This starts a local PostgreSQL container, stores one simulated run and writes `data/generated/chart.png`. Stop the database with `docker compose down`.
 
 ## Results
 
