@@ -1,13 +1,13 @@
 # Evaluation criteria v1
 
-Status: **DRAFT** until the git tag `eval-criteria-v1` exists. After the tag, this file is frozen (section 11).
+Status: **FROZEN** by the git tag `eval-criteria-v1`. This file is never edited after the tag (section 11).
 Date drafted: 2026-11-06. All data in this project is simulated. Nothing here claims real industrial experience.
 
-## 0. Parameters Huy must confirm before the freeze
+## 0. Parameters confirmed by Huy for the freeze
 
-These values are proposals. They are the only things that may change before the tag.
+These values were proposals until the freeze and are fixed by the tag.
 
-| ID | Parameter | Proposed value | Why |
+| ID | Parameter | Value | Why |
 |---|---|---|---|
 | P1 | Simulated length and chronological split | 18 months of data: train 12 months, 7-day gap, validation 3 months, 7-day gap, test 3 months | Train covers one full annual cycle if annual seasonality is simulated; measured with the run start 2025-01-01 and 7-day gaps: train 365 days, validation 90 days, test 91 days |
 | P2 | Minimum incidents per class in validation and test; maximum share of anomalous time per split | 5 per class; 10% | 7 classes x 5 = 35 incidents per split; the share cap keeps the data from being mostly anomalous |
@@ -17,7 +17,7 @@ These values are proposals. They are the only things that may change before the 
 
 Sampling interval is fixed in the M1 spec. For scale only: at 15-minute sampling, the measured run from 2025-01-01 stores 52,416 samples per sensor (546 days x 96: train 35,040, validation 8,640, test 8,736). The two 7-day gaps cover 1,344 sample times (14 days x 96) that are not stored.
 
-P1-P5 and the optional regime/context channel decision confirmed by Huy on 2026-11-06.
+P2-P5 and the optional regime/context channel decision were first confirmed by Huy on 2026-11-06. P1 was changed on 2026-11-08 (two 7-day gaps between the splits). Huy confirmed P1-P5 as written above before the freeze; the freeze date is the date of the git tag `eval-criteria-v1`.
 
 ## 1. Data and splits (simulator)
 
@@ -69,7 +69,8 @@ A learned method must beat R0 and B1 under section 7 before the README may call 
 
 - **Primary:** incident recall at the frozen operating point (detected incidents / all incidents), overall and per class, always with counts.
 - **Secondary:** median and 90th-percentile delay over detected incidents plus the number undetected; false alarms per day on test; event precision (matched alarms / all alarms); point-level precision, recall and F1 per timestamp.
-- **D1 (if P4 is accepted):** among detected incidents, the share where the diagnosed type (fault or attack) equals the true type. If no diagnosing component exists by the end of M4, D1 is reported as "not evaluated" and the README must not claim fault-versus-attack separation.
+- **Sensitivity to the budget:** recall also at false-alarm budgets of 0.25, 0.5 and 2 per day besides B. Thresholds are chosen on validation by the rule of section 4, each budget is a frozen configuration evaluated once on test, on the primary seed only. These results are descriptive and are never used for the word "beats".
+- **D1 (if P4 is accepted):** among detected incidents, the share where the diagnosed type (fault or attack) equals the true type. It is reported with its 95% interval (section 7), the confusion matrix, and the accuracy of a baseline that always names the type that is more frequent among the detected incidents. The README may claim fault-versus-attack separation only if the lower end of the D1 interval is above that baseline accuracy. If no diagnosing component exists by the end of M4, D1 is reported as "not evaluated" and the README must not claim fault-versus-attack separation.
 
 ## 7. Uncertainty and the word "beats"
 
