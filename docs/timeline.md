@@ -8,7 +8,7 @@ Status: DRAFT. Written on 2026-11-07. Weekend milestones; the author works 1-4 h
 |---|---|---|
 | M0 | 6-8 Nov 2026 | Decisions, evaluation criteria (draft), repo skeleton, problem brief, timeline |
 | M1 | 14-15 Nov | Simulator to database to one chart; tag `eval-criteria-v1` at the end |
-| M2 | 21-22 Nov | Schema, indexes, data-quality checks, then profile 2 through the same pipeline |
+| M2 | Part A from 15 Nov, Part B 21-22 Nov | Part A: migrations, runs, data-quality checks, indexes, tag `profile1-done`. Part B: profile 2 through the same pipeline, tag `profile2-done` |
 | M3 | 28-29 Nov | Statistical detection and frozen evaluation on simulated data |
 | Exams | 1-15 Dec | Project frozen: small commits at most, no milestone counted |
 | Optional | 16-18 Dec | Weekdays after exams, extra time for M4 |
@@ -55,6 +55,31 @@ Must:
 If time:
 - Seasonality in the simulator.
 - Inject drift, stuck sensor and replayed data.
+
+## M2 (Part A from 15 Nov, Part B 21-22 Nov)
+
+M1 finished on 11 Nov, before its planned weekend. M2 Part A starts on 15 Nov, but M2 still ends on 22 Nov: it was not completed a weekend early, so M3 gains no extra buffer.
+
+Must, Part A (core work, ends with the tag `profile1-done`):
+- Numbered SQL migrations with a small runner and `schema_migrations`; `db/schema.sql` is removed.
+- A `runs` table, with every data table keyed by run.
+- Optional per-state nominal range per sensor.
+- Seed-42 regression: stored readings and schedule identical before and after Part A.
+- Five data-quality checks for pipeline integrity, results in `dq_results`; the demo exits non-zero on a failure.
+- Indexes kept only with measured `EXPLAIN (ANALYZE, BUFFERS)` before and after.
+- Plant-term test driven by `plant_terms.txt` in each profile folder.
+- The missing M1 test for "context.schedule.daily_hours must list every state".
+- ADR 0007 for migrations, runs and data quality; a deviations log started with the profile 2 README line.
+
+Must, Part B (21-22 Nov):
+- Profile 2 confirmed on paper first, then `python -m plantmon demo --profile engine_test_cell` through the same pipeline.
+- Tag `profile2-done` and a generality report with the raw `git diff profile1-done profile2-done -- src/plantmon db`.
+
+If time:
+- A separate `python -m plantmon dq --run <id>` command.
+- Context row count check.
+
+The full spec is `docs/specs/m2.md`. If Part A is not done by 21 Nov, that is a slip under the rules above and is reported; nothing is dropped silently.
 
 ## M3 (28-29 Nov)
 
