@@ -23,6 +23,7 @@ def test_valid_profile_passes(profile):
         (lambda p: p["sensors"][0]["signal"].update(ar1=1.0), "ar1"),
         (lambda p: p["sensors"][0]["signal"]["state_offset"].update(gamma=1), "unknown states"),
         (lambda p: p["context"]["schedule"]["daily_hours"].update(beta=[11, 24]), "exactly once"),
+        (lambda p: p["context"]["schedule"]["daily_hours"].pop("beta"), "must list every state"),
         (lambda p: p["incident_classes"][0].update(type="nope"), "unknown type"),
         (lambda p: p["sampling"].update(interval_minutes=7), "divides a day"),
         (lambda p: p["run"].update(split_gap_days=7.5), "split_gap_days"),
