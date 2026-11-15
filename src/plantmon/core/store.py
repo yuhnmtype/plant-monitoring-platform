@@ -1,23 +1,17 @@
 """Write a simulated run to PostgreSQL and read series back."""
 
 from datetime import datetime
-from pathlib import Path
 
 import numpy as np
 import psycopg
 
 # shortcut: fixed local trust-auth database (ADR 0001, compose.yaml), make configurable for M7.
 DSN = "postgresql://plantmon@127.0.0.1:5433/plantmon"
-SCHEMA_PATH = Path("db/schema.sql")
 
 
 def connect() -> psycopg.Connection:
     # Without a timeout, an unreachable database blocked for about 130 s per attempt on Windows.
     return psycopg.connect(DSN, connect_timeout=5)
-
-
-def apply_schema(conn: psycopg.Connection) -> None:
-    conn.execute(SCHEMA_PATH.read_text(encoding="utf-8"))
 
 
 def replace_run(

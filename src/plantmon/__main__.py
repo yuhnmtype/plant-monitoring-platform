@@ -8,8 +8,9 @@ from datetime import timedelta
 from pathlib import Path
 
 from plantmon.core.chart import write_chart
+from plantmon.core.migrate import MigrationError, migrate
 from plantmon.core.profile import load_profile
-from plantmon.core.store import apply_schema, connect, count_rows, read_series, replace_run
+from plantmon.core.store import connect, count_rows, read_series, replace_run
 from plantmon.sim.schedule import anomalous_share, generate_schedule, validate_schedule
 from plantmon.sim.signals import context_states, simulate, split_bounds, timestamps
 
@@ -33,7 +34,11 @@ def demo(profile_id: str, seed: int) -> int:
     values = simulate(profile, seed).reported
     states = context_states(profile, times)
     with connect() as conn:
-        apply_schema(conn)
+        try:
+            migrate(conn)
+        except MigrationError as error:
+            print(f"Migration refused: {error}")
+            return 1
         written = replace_run(conn, profile, seed, times, values, states, incidents)
         sensor = next(s for s in profile["sensors"] if s["kind"] == "measurement")
         chart_times, chart_values = read_series(

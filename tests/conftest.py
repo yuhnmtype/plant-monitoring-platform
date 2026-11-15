@@ -1,6 +1,25 @@
 from datetime import date
 
+import psycopg
 import pytest
+
+from plantmon.core.store import connect
+
+
+@pytest.fixture
+def db():
+    """A connection to a throwaway schema, dropped afterwards. Stored demo data is never touched."""
+    try:
+        connection = connect()
+    except psycopg.OperationalError:
+        pytest.skip("database not running: docker compose up -d --wait db")
+    with connection:
+        connection.autocommit = True  # so the runner's transactions are real, not savepoints
+        connection.execute("DROP SCHEMA IF EXISTS test_throwaway CASCADE")
+        connection.execute("CREATE SCHEMA test_throwaway")
+        connection.execute("SET search_path TO test_throwaway")
+        yield connection
+        connection.execute("DROP SCHEMA test_throwaway CASCADE")
 
 
 @pytest.fixture

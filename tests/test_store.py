@@ -1,23 +1,18 @@
-"""Integration tests against the compose database. Skipped, visibly, when it is not running."""
+"""Integration tests in a throwaway schema. Skipped, visibly, when the database is down."""
 
 import psycopg
 import pytest
 
-from plantmon.core.store import apply_schema, connect, count_rows, read_series, replace_run
+from plantmon.core.migrate import migrate
+from plantmon.core.store import count_rows, read_series, replace_run
 from plantmon.sim.schedule import generate_schedule
 from plantmon.sim.signals import context_states, simulate, timestamps
 
 
 @pytest.fixture
-def conn(profile):
-    try:
-        connection = connect()
-    except psycopg.OperationalError:
-        pytest.skip("database not running: docker compose up -d --wait db")
-    with connection:
-        apply_schema(connection)
-        yield connection
-        connection.execute("DELETE FROM profiles WHERE id = %s", (profile["profile"]["id"],))
+def conn(db):
+    migrate(db)
+    return db
 
 
 def _store(conn, profile, seed=42):
