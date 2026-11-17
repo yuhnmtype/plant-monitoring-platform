@@ -1,6 +1,7 @@
 """Command line: python -m plantmon demo --profile <id>. Run from the repo root."""
 
 import argparse
+import hashlib
 import subprocess
 import sys
 import time
@@ -22,7 +23,9 @@ PRIMARY_SEED = 42  # P5 in docs/evaluation-criteria-v1.md
 def demo(profile_id: str, seed: int) -> int:
     started = time.perf_counter()
     subprocess.run(["docker", "compose", "up", "-d", "--wait", "db"], check=True)
-    profile = load_profile(Path("profiles") / profile_id / "profile.yaml")
+    profile_path = Path("profiles") / profile_id / "profile.yaml"
+    profile = load_profile(profile_path)
+    profile_sha256 = hashlib.sha256(profile_path.read_bytes()).hexdigest()
 
     incidents = generate_schedule(profile, seed)
     errors = validate_schedule(profile, incidents)
@@ -39,19 +42,22 @@ def demo(profile_id: str, seed: int) -> int:
         except MigrationError as error:
             print(f"Migration refused: {error}")
             return 1
-        written = replace_run(conn, profile, seed, times, values, states, incidents)
+        run_id = replace_run(
+            conn, profile, profile_sha256, seed, times, values, states, incidents,
+            split_bounds(profile),
+        )
         sensor = next(s for s in profile["sensors"] if s["kind"] == "measurement")
         chart_times, chart_values = read_series(
-            conn, profile_id, sensor["id"], times[0] + timedelta(days=CHART_DAYS)
+            conn, run_id, sensor["id"], times[0] + timedelta(days=CHART_DAYS)
         )
         stored = {
-            table: count_rows(conn, table, profile_id)
-            for table in ("readings", "context_readings", "incident_labels")
+            table: count_rows(conn, table, run_id)
+            for table in ("readings", "context_readings", "incident_labels", "run_splits")
         }
     write_chart(CHART_PATH, profile["profile"]["name"], sensor, chart_times, chart_values)
 
-    print(f"All data is simulated. Profile {profile_id}, seed {seed}.")
-    print(f"Samples per sensor: {len(times)}. Sensors: {len(values)}. Readings written: {written}.")
+    print(f"All data is simulated. Profile {profile_id}, seed {seed}, run_id {run_id}.")
+    print(f"Samples per sensor: {len(times)}. Sensors: {len(values)}.")
     print(f"Rows stored: {stored}")
     step = timedelta(minutes=profile["sampling"]["interval_minutes"])
     for split, (low, high) in split_bounds(profile).items():

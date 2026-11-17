@@ -17,62 +17,96 @@ def connect() -> psycopg.Connection:
 def replace_run(
     conn: psycopg.Connection,
     profile: dict,
+    profile_sha256: str,
     seed: int,
     times: list[datetime],
     values: dict[str, np.ndarray],
     states: list[str] | None,
     incidents: list,
+    splits: dict[str, tuple[datetime, datetime]],
 ) -> int:
-    """Replace all stored data of this profile in one transaction. Return the readings written."""
-    profile_id = profile["profile"]["id"]
+    """Store one run in one transaction and return its run_id.
+
+    The same profile id, seed and profile hash keeps its run_id and has its rows rewritten.
+    Any other combination adds a run and leaves the others alone. splits maps a split name to its
+    half-open (start, end) range.
+    """
+    meta = profile["profile"]
     with conn.transaction():
-        conn.execute("DELETE FROM profiles WHERE id = %s", (profile_id,))
-        conn.execute(
-            "INSERT INTO profiles (id, name, simulated, seed) VALUES (%s, %s, %s, %s)",
-            (profile_id, profile["profile"]["name"], profile["profile"]["simulated"], seed),
-        )
+        run_id = conn.execute(
+            "INSERT INTO runs (profile_id, name, simulated, seed, profile_sha256, interval_minutes)"
+            " VALUES (%s, %s, %s, %s, %s, %s)"
+            " ON CONFLICT (profile_id, seed, profile_sha256) DO UPDATE SET created_at = now()"
+            " RETURNING run_id",
+            (
+                meta["id"],
+                meta["name"],
+                meta["simulated"],
+                seed,
+                profile_sha256,
+                profile["sampling"]["interval_minutes"],
+            ),
+        ).fetchone()[0]
+        # Deleting sensors also deletes their readings and state ranges (ON DELETE CASCADE).
+        for table in ("run_splits", "sensors", "context_readings", "incident_labels"):
+            conn.execute(f"DELETE FROM {table} WHERE run_id = %s", (run_id,))
         with conn.cursor() as cur:
             cur.executemany(
-                "INSERT INTO sensors (profile_id, id, asset, kind, unit, nominal_low, nominal_high)"
+                "INSERT INTO run_splits (run_id, split, start_ts, end_ts) VALUES (%s, %s, %s, %s)",
+                [(run_id, name, *bounds) for name, bounds in splits.items()],
+            )
+            cur.executemany(
+                "INSERT INTO sensors (run_id, id, asset, kind, unit, nominal_low, nominal_high)"
                 " VALUES (%s, %s, %s, %s, %s, %s, %s)",
                 [
-                    (profile_id, s["id"], s["asset"], s["kind"], s["unit"], *s["nominal_range"])
+                    (run_id, s["id"], s["asset"], s["kind"], s["unit"], *s["nominal_range"])
                     for s in profile["sensors"]
                 ],
             )
-            with cur.copy(
-                "COPY readings (profile_id, sensor_id, ts, value) FROM STDIN"
-            ) as copy:
+            if states is not None:
+                cur.executemany(
+                    "INSERT INTO sensor_state_ranges (run_id, sensor_id, state, low, high)"
+                    " VALUES (%s, %s, %s, %s, %s)",
+                    [
+                        (
+                            run_id,
+                            s["id"],
+                            state,
+                            *s.get("nominal_range_by_state", {}).get(state, s["nominal_range"]),
+                        )
+                        for s in profile["sensors"]
+                        for state in profile["context"]["states"]
+                    ],
+                )
+            with cur.copy("COPY readings (run_id, sensor_id, ts, value) FROM STDIN") as copy:
                 for sensor_id, series in values.items():
                     for ts, value in zip(times, series.tolist()):
-                        copy.write_row((profile_id, sensor_id, ts, value))
+                        copy.write_row((run_id, sensor_id, ts, value))
             if states is not None:
-                with cur.copy("COPY context_readings (profile_id, ts, state) FROM STDIN") as copy:
+                with cur.copy("COPY context_readings (run_id, ts, state) FROM STDIN") as copy:
                     for ts, state in zip(times, states):
-                        copy.write_row((profile_id, ts, state))
+                        copy.write_row((run_id, ts, state))
             with cur.copy(
-                "COPY incident_labels"
-                " (profile_id, start_ts, end_ts, class_id, incident_type, split) FROM STDIN"
+                "COPY incident_labels (run_id, start_ts, end_ts, class_id, incident_type, split)"
+                " FROM STDIN"
             ) as copy:
                 for i in incidents:
-                    copy.write_row(
-                        (profile_id, i.start, i.end, i.class_id, i.incident_type, i.split)
-                    )
-    return sum(len(series) for series in values.values())
+                    copy.write_row((run_id, i.start, i.end, i.class_id, i.incident_type, i.split))
+    return run_id
 
 
-def count_rows(conn: psycopg.Connection, table: str, profile_id: str) -> int:
+def count_rows(conn: psycopg.Connection, table: str, run_id: int) -> int:
     # table comes from this codebase's own callers, never from user input.
-    query = f"SELECT count(*) FROM {table} WHERE profile_id = %s"
-    return conn.execute(query, (profile_id,)).fetchone()[0]
+    query = f"SELECT count(*) FROM {table} WHERE run_id = %s"
+    return conn.execute(query, (run_id,)).fetchone()[0]
 
 
 def read_series(
-    conn: psycopg.Connection, profile_id: str, sensor_id: str, until: datetime
+    conn: psycopg.Connection, run_id: int, sensor_id: str, until: datetime
 ) -> tuple[list[datetime], list[float]]:
     rows = conn.execute(
-        "SELECT ts, value FROM readings WHERE profile_id = %s AND sensor_id = %s AND ts < %s"
+        "SELECT ts, value FROM readings WHERE run_id = %s AND sensor_id = %s AND ts < %s"
         " ORDER BY ts",
-        (profile_id, sensor_id, until),
+        (run_id, sensor_id, until),
     ).fetchall()
     return [r[0] for r in rows], [r[1] for r in rows]
