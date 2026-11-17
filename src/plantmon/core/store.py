@@ -48,7 +48,8 @@ def replace_run(
             ),
         ).fetchone()[0]
         # Deleting sensors also deletes their readings and state ranges (ON DELETE CASCADE).
-        for table in ("run_splits", "sensors", "context_readings", "incident_labels"):
+        # dq_results go too: results of the old rows must not survive a rewrite.
+        for table in ("run_splits", "sensors", "context_readings", "incident_labels", "dq_results"):
             conn.execute(f"DELETE FROM {table} WHERE run_id = %s", (run_id,))
         with conn.cursor() as cur:
             cur.executemany(

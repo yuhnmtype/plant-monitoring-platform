@@ -11,6 +11,7 @@ from pathlib import Path
 from plantmon.core.chart import write_chart
 from plantmon.core.migrate import MigrationError, migrate
 from plantmon.core.profile import load_profile
+from plantmon.core.quality import run_checks
 from plantmon.core.store import connect, count_rows, read_series, replace_run
 from plantmon.sim.schedule import anomalous_share, generate_schedule, validate_schedule
 from plantmon.sim.signals import context_states, simulate, split_bounds, timestamps
@@ -46,6 +47,7 @@ def demo(profile_id: str, seed: int) -> int:
             conn, profile, profile_sha256, seed, times, values, states, incidents,
             split_bounds(profile),
         )
+        checks = run_checks(conn, run_id)
         sensor = next(s for s in profile["sensors"] if s["kind"] == "measurement")
         chart_times, chart_values = read_series(
             conn, run_id, sensor["id"], times[0] + timedelta(days=CHART_DAYS)
@@ -59,6 +61,9 @@ def demo(profile_id: str, seed: int) -> int:
     print(f"All data is simulated. Profile {profile_id}, seed {seed}, run_id {run_id}.")
     print(f"Samples per sensor: {len(times)}. Sensors: {len(values)}.")
     print(f"Rows stored: {stored}")
+    for check in checks:
+        status = "passed" if check.passed else "FAILED"
+        print(f"Data quality {check.check_id}: {status}, violations {check.violations}")
     step = timedelta(minutes=profile["sampling"]["interval_minutes"])
     for split, (low, high) in split_bounds(profile).items():
         samples = sum(low <= t < high for t in times)
@@ -71,7 +76,7 @@ def demo(profile_id: str, seed: int) -> int:
         )
     print(f"Chart: {CHART_PATH}")
     print(f"Run time: {time.perf_counter() - started:.1f} s")
-    return 0
+    return 0 if all(check.passed for check in checks) else 1
 
 
 def main() -> int:

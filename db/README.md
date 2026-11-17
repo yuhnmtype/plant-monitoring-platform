@@ -8,6 +8,24 @@ All data is simulated. See ADR 0001 and 0002.
     all keyed by `run_id` (`bigint` identity) with `ON DELETE CASCADE` from `runs`. It deletes
     stored simulated data; the data is regenerated from the seed.
   - `0003_state_ranges`: `sensor_state_ranges`, one row per run, sensor and state.
+  - `0004_dq_results`: `dq_results`, one row per run and check (`passed`, `violations`,
+    `checked_at`).
+- Run ids are unique and stable but not consecutive: a rerun of the same run uses up an identity
+  value. `runs.created_at` means "the last time the run's rows were written".
+- `checks/<check_id>.sql`: the data-quality checks, run per `run_id` by
+  `plantmon.core.quality.run_checks` and called by the demo, which exits non-zero when one fails.
+  Each file is pure SQL with one query, the named parameter `%(run_id)s` and no schema prefix,
+  and returns exactly one integer: the number of violations. Pipeline integrity only; plant
+  behaviour is detector work.
+  - `sample_count`: per sensor and split, the readings in `[start_ts, end_ts)` number
+    `(end_ts - start_ts) / interval`; violations are the (sensor, split) pairs that differ. The
+    gaps between splits are expected holes.
+  - `regular_step`: within a sensor and a split, consecutive timestamps differ by exactly the
+    interval; violations are the rows whose gap to the previous row is not.
+  - `finite_values`: no NaN, `Infinity` or `-Infinity` in `readings.value`.
+  - `outside_splits`: readings and context rows inside no split.
+  - `labels_in_split`: every incident label lies inside the split it names.
+  A rewrite of a run (`replace_run`) deletes its `dq_results`, so results are never stale.
 - Runs: `UNIQUE (profile_id, seed, profile_sha256)`. The same profile, seed and profile hash keeps
   its `run_id` and has its rows rewritten in one transaction; another seed or another hash adds a
   run. `profile_sha256` is the SHA-256 of the raw bytes of the profile file.
