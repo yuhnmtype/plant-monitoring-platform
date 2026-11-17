@@ -24,6 +24,30 @@ def test_valid_profile_passes(profile):
         (lambda p: p["sensors"][0]["signal"]["state_offset"].update(gamma=1), "unknown states"),
         (lambda p: p["context"]["schedule"]["daily_hours"].update(beta=[11, 24]), "exactly once"),
         (lambda p: p["context"]["schedule"]["daily_hours"].pop("beta"), "must list every state"),
+        (
+            lambda p: p["sensors"][0].update(nominal_range_by_state={"gamma": [0, 1]}),
+            "unknown states",
+        ),
+        (lambda p: p["sensors"][0].update(nominal_range_by_state=[0, 1]), "must map states"),
+        (lambda p: p["sensors"][0].update(nominal_range_by_state={"alpha": [1]}), "alpha must be"),
+        (
+            lambda p: p["sensors"][0].update(nominal_range_by_state={"alpha": [0, "x"]}),
+            "alpha must be",
+        ),
+        (
+            lambda p: p["sensors"][0].update(nominal_range_by_state={"alpha": [0, float("nan")]}),
+            "alpha must be",
+        ),
+        (lambda p: p["sensors"][0].update(nominal_range_by_state={"alpha": [5, 5]}), "low < high"),
+        (lambda p: p["sensors"][0].update(nominal_range_by_state={"alpha": [9, 1]}), "low < high"),
+        (
+            lambda p: (
+                p.pop("context"),
+                p["sensors"][0]["signal"].pop("state_offset"),
+                p["sensors"][0].update(nominal_range_by_state={"alpha": [0, 1]}),
+            ),
+            "unknown states",
+        ),
         (lambda p: p["incident_classes"][0].update(type="nope"), "unknown type"),
         (lambda p: p["sampling"].update(interval_minutes=7), "divides a day"),
         (lambda p: p["run"].update(split_gap_days=7.5), "split_gap_days"),

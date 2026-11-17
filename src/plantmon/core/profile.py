@@ -104,11 +104,33 @@ def _sensor_errors(s: dict, assets: set, states: set, sensor_ids: set) -> list[s
     noise = s.get("measurement_noise_std", 0)
     if not _is_finite(noise) or noise < 0:
         errors.append(f"sensor {s['id']}: measurement_noise_std must be finite and not negative")
+    errors += _range_by_state_errors(s, states)
     if "follows" in s:
         return errors + _follows_errors(s, states, sensor_ids)
     if "signal" not in s:
         return errors + [f"sensor {s['id']}: needs a signal or follows block"]
     return errors + _signal_errors(s, states)
+
+
+def _range_by_state_errors(s: dict, states: set) -> list[str]:
+    """nominal_range_by_state: {state: [low, high]}; a state left out uses nominal_range."""
+    if "nominal_range_by_state" not in s:
+        return []
+    by_state = s["nominal_range_by_state"]
+    if not isinstance(by_state, dict):
+        return [f"sensor {s['id']}: nominal_range_by_state must map states to [low, high]"]
+    errors = []
+    unknown = set(by_state) - states
+    if unknown:
+        errors.append(
+            f"sensor {s['id']}: nominal_range_by_state has unknown states {sorted(unknown)}"
+        )
+    for state, pair in by_state.items():
+        if not (isinstance(pair, list | tuple) and len(pair) == 2 and all(map(_is_finite, pair))):
+            errors.append(f"sensor {s['id']}: nominal_range_by_state {state} must be [low, high]")
+        elif not pair[0] < pair[1]:
+            errors.append(f"sensor {s['id']}: nominal_range_by_state {state} needs low < high")
+    return errors
 
 
 def _follows_errors(s: dict, states: set, sensor_ids: set) -> list[str]:
