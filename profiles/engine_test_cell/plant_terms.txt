@@ -1,0 +1,14 @@
+engine
+throttle
+rpm
+shaft
+vibration
+exhaust
+coolant
+bearing
+torque
+combustion
+oil
+idle
+ramp
+full_load

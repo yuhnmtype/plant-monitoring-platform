@@ -1,0 +1,141 @@
+# Fictional engine test cell. All data is simulated and every number here is invented for the simulation.
+profile:
+  id: engine_test_cell
+  name: Fictional engine test cell
+  simulated: true
+
+sampling:
+  interval_minutes: 5
+
+# Split lengths come from P1 in docs/evaluation-criteria-v1.md. The start date is arbitrary.
+run:
+  start: 2025-01-01
+  # Whole days between consecutive splits. Gap samples are not generated into any output or stored.
+  split_gap_days: 7
+  split_months:
+    train: 12
+    validation: 3
+    test: 3
+
+assets:
+  - {id: engine, name: Test engine, kind: engine}
+  - {id: oil_circuit, name: Oil circuit, kind: circuit}
+  - {id: cooling_circuit, name: Cooling circuit, kind: circuit}
+  - {id: cell_air, name: Cell intake air, kind: air}
+
+# Operating regimes (ADR 0006) on a fixed daily clock, hours in UTC. One contiguous span per state,
+# so the day ends with a step from full_load to idle and ramp is a step, not a gradual change.
+context:
+  states: [idle, ramp, full_load]
+  schedule:
+    daily_hours: {idle: [0, 9], ramp: [9, 11], full_load: [11, 24]}
+
+# kind is one of: measurement, command, position.
+# follows: physical value = offset + gain x the source's physical value at the same timestamp.
+# measurement_noise_std: independent noise added to the reported value only (default 0).
+# daily_phase_hours: delays the daily cycle of an independent signal (default 0).
+# state_offset: added to an independent signal while the context is in that state.
+# nominal_range_by_state: the range of a sensor in each state; nominal_range is the hull of them.
+# ar1 is per sample (5 minutes). All numbers are simulation settings, not measurements.
+sensors:
+  - id: throttle_command
+    asset: engine
+    kind: command
+    unit: percent
+    nominal_range: [7, 94]
+    nominal_range_by_state:
+      idle: [7, 26]
+      ramp: [48, 65]
+      full_load: [74, 94]
+    signal:
+      base: 55
+      daily_amplitude: 2
+      daily_phase_hours: 0
+      noise_std: 1.5
+      ar1: 0.965
+      state_offset: {idle: -40, ramp: 0, full_load: 30}
+  - id: shaft_speed
+    asset: engine
+    kind: measurement
+    unit: rpm
+    nominal_range: [760, 2970]
+    nominal_range_by_state:
+      idle: [760, 1250]
+      ramp: [1800, 2230]
+      full_load: [2430, 2970]
+    follows: {source: throttle_command, gain: 25.0, offset: 600.0}
+    measurement_noise_std: 15.0
+  - id: vibration_rms
+    asset: engine
+    kind: measurement
+    unit: mm/s
+    nominal_range: [2.0, 7.0]
+    nominal_range_by_state:
+      idle: [2.0, 3.7]
+      ramp: [4.1, 5.5]
+      full_load: [5.2, 7.0]
+    follows: {source: shaft_speed, gain: 0.002, offset: 0.8}
+    measurement_noise_std: 0.1
+  - id: exhaust_gas_temp
+    asset: engine
+    kind: measurement
+    unit: degC
+    nominal_range: [285, 830]
+    nominal_range_by_state:
+      idle: [285, 415]
+      ramp: [525, 650]
+      full_load: [685, 830]
+    follows: {source: throttle_command, gain: 6.0, offset: 250.0}
+    measurement_noise_std: 6.0
+  - id: oil_pressure
+    asset: oil_circuit
+    kind: measurement
+    unit: bar
+    nominal_range: [1.95, 4.9]
+    nominal_range_by_state:
+      idle: [1.95, 2.85]
+      ramp: [3.2, 4.05]
+      full_load: [4.0, 4.9]
+    follows: {source: shaft_speed, gain: 0.0012, offset: 1.2}
+    measurement_noise_std: 0.05
+  - id: coolant_outlet_temp
+    asset: cooling_circuit
+    kind: measurement
+    unit: degC
+    nominal_range: [71.5, 91.5]
+    nominal_range_by_state:
+      idle: [71.5, 80.0]
+      ramp: [80.5, 86.0]
+      full_load: [82.5, 91.5]
+    signal:
+      base: 82
+      daily_amplitude: 1.5
+      daily_phase_hours: 6
+      noise_std: 0.5
+      ar1: 0.99
+      state_offset: {idle: -6, ramp: 0, full_load: 5}
+  - id: intake_air_temp
+    asset: cell_air
+    kind: measurement
+    unit: degC
+    nominal_range: [12.5, 27.5]
+    signal: {base: 20, daily_amplitude: 4, daily_phase_hours: 9, noise_std: 0.4, ar1: 0.983}
+
+incident_schedule:
+  min_per_class: 5          # P2
+  max_anomalous_share: 0.10 # P2
+  # Minimum from docs/evaluation-criteria-v1.md section 1. May be raised before any detector runs
+  # (record it in the deviations log).
+  boundary_margin_hours: 48
+  # Keeps one alarm from spanning two incidents, which would inflate recall (criteria section 5).
+  min_gap_hours: 24
+
+# Patterns are in docs/problem-brief.md section 4. Injection targets are added in M3.
+incident_classes:
+  - {id: sensor_drift, type: fault, duration_hours: [2, 8]}
+  - {id: stuck_sensor, type: fault, duration_hours: [2, 8]}
+  - {id: bearing_wear, type: fault, duration_hours: [2, 8]}
+  - {id: oil_pressure_loss, type: fault, duration_hours: [2, 8]}
+  - {id: manipulated_readings, type: attack, duration_hours: [2, 8]}
+  - {id: manipulated_commands, type: attack, duration_hours: [2, 8]}
+  - {id: replayed_data, type: attack, duration_hours: [2, 8]}
