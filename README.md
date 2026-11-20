@@ -10,7 +10,7 @@ A generic monitoring platform for industrial plants, built and evaluated entirel
 |---|---|---|
 | M0 | Decisions, evaluation criteria, repo skeleton | Done |
 | M1 | Seeded simulator (simulated data), incident schedule with validator, PostgreSQL store, one-command demo; evaluation criteria frozen by the tag `eval-criteria-v1` | Done |
-| M2 | Schema, indexes, data-quality checks, profile 2 | In progress |
+| M2 | Schema, indexes, data-quality checks, profile 2 | Done |
 | M3 | Statistical detection and frozen evaluation | Not started |
 | M4 | ML method and public-benchmark evaluation | Not started |
 | M5 | Dashboard, alerts, monthly KPI report | Not started |
@@ -19,6 +19,8 @@ A generic monitoring platform for industrial plants, built and evaluated entirel
 | M8 | Azure, demo, one-page summary, tag v1.0 | Not started |
 
 Allowed values: Not started / In progress / Done. CV bullets are written only for Done items.
+
+M2: a second simulated profile (a fictional engine test cell) runs through the same core, with zero changed lines under `src/plantmon` and `db` between the tags `profile1-done` and `profile2-done`. The core capabilities for operating regimes were added before `profile1-done`, so that result does not cover them; see the [generality report](docs/generality-report-m2.md).
 
 ## How to run
 
