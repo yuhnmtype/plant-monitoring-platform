@@ -9,9 +9,10 @@ Status: DRAFT. Written on 2026-11-07. Weekend milestones; the author works 1-4 h
 | M0 | 6-8 Nov 2026 | Decisions, evaluation criteria (draft), repo skeleton, problem brief, timeline |
 | M1 | 14-15 Nov | Simulator to database to one chart; tag `eval-criteria-v1` at the end |
 | M2 | Part A from 15 Nov, Part B brought forward from 21-22 Nov (exam period from 1 Dec); M3 start unchanged unless Huy decides otherwise | Part A: migrations, runs, data-quality checks, indexes, tag `profile1-done`. Part B: profile 2 through the same pipeline, tag `profile2-done` |
-| M3 | 28-29 Nov | Statistical detection and frozen evaluation on simulated data |
+| M3a | 28-29 Nov | Injection of the incident classes into profile 1, chart review, tag `m3-injection-frozen` |
+| M3b | After the exams, in the 16-18 Dec slot (slip against the old row "M3, 28-29 Nov") | Evaluation code, detectors R0 and B1, validation sweep, one frozen test run on simulated data, tag `m3-done` |
 | Exams | 1-15 Dec | Project frozen: small commits at most, no milestone counted |
-| Optional | 16-18 Dec | Weekdays after exams, extra time for M4 |
+| Optional | 16-18 Dec | Weekdays after exams: used by M3b (see the M3b row), so no longer extra time for M4 |
 | M4 | 19-20 Dec and 26-27 Dec | ML method and public-benchmark evaluation, full size, two weekends |
 | Optional | 28-31 Dec | Weekdays, extra time for M4 or M5 |
 | M5 | 2-3 Jan 2027 | Dashboard, alerts, monthly KPI report |
@@ -20,7 +21,7 @@ Status: DRAFT. Written on 2026-11-07. Weekend milestones; the author works 1-4 h
 | M8 | 23-24 Jan | Azure, demo, one-page summary, tag v1.0 |
 | Buffer | 25-31 Jan | Hard stop on 31 Jan |
 
-M4 keeps its full size and gets two weekends instead of being shrunk. The cost is that the buffer is one week, not two. The optional weekdays are there to protect it.
+M4 keeps its full size and gets two weekends instead of being shrunk. The cost is that the buffer is one week, not two. The optional weekdays 28-31 Dec are there to protect it; the optional weekdays 16-18 Dec are now used by M3b.
 
 ## Rules
 
@@ -81,12 +82,14 @@ If time:
 
 The full spec is `docs/specs/m2.md`. If Part A is not done by 21 Nov, that is a slip under the rules above and is reported; nothing is dropped silently.
 
-## M3 (28-29 Nov)
+## M3 (M3a 28-29 Nov, M3b after the exams)
+
+M3 is split (decided 2026-11-20). M3a (28-29 Nov, before the exam period) is injection only. M3b (after the exams, in the 16-18 Dec slot) is the evaluation code, the detectors, the validation sweep and one frozen test run. This is a slip against the old plan "M3 = 28-29 Nov", not a gain: the optional time before M4 is used by M3b. M4 keeps 19-20 Dec and 26-27 Dec.
 
 Carried over from M1:
-- Inject the 7 incident classes into the signals, as the first must item (moved from M1; anything already injected as an M1 if-time item is not repeated).
+- Inject the 7 incident classes into the signals, as the first must item of M3a (moved from M1; anything already injected as an M1 if-time item is not repeated).
 
-The other M3 must and if-time items are written in its spec before the milestone starts.
+The M3 must and if-time items are in `docs/specs/m3.md`.
 
 ## M6 (9-10 Jan)
 
