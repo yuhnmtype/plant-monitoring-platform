@@ -11,7 +11,7 @@ A generic monitoring platform for industrial plants, built and evaluated entirel
 | M0 | Decisions, evaluation criteria, repo skeleton | Done |
 | M1 | Seeded simulator (simulated data), incident schedule with validator, PostgreSQL store, one-command demo; evaluation criteria frozen by the tag `eval-criteria-v1` | Done |
 | M2 | Schema, indexes, data-quality checks, profile 2 | Done |
-| M3 | Statistical detection and frozen evaluation | Not started |
+| M3 | Statistical detection and frozen evaluation | In progress |
 | M4 | ML method and public-benchmark evaluation | Not started |
 | M5 | Dashboard, alerts, monthly KPI report | Not started |
 | M6 | Audit logging, detection rules, threat model | Not started |
