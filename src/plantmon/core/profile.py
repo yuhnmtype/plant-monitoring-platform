@@ -20,6 +20,18 @@ SENSOR_KINDS = {"measurement", "command", "position"}
 INCIDENT_TYPES = {"fault", "attack"}
 SPLITS = ("train", "validation", "test")
 FOLLOWS_KEYS = {"source", "gain", "offset"}
+# Injection primitives (docs/specs/m3.md) and, for each, the keys its block may hold.
+_WITH_MAGNITUDE = {"primitive", "targets", "magnitude", "sign"}
+INJECTION_KEYS = {
+    "slope": _WITH_MAGNITUDE,
+    "hold": {"primitive", "targets"},
+    "step_offset": _WITH_MAGNITUDE,
+    "scale_relation": _WITH_MAGNITUDE,
+    "replay": {"primitive", "targets", "max_lag_hours"},
+    "command_override": _WITH_MAGNITUDE,
+}
+INJECTION_SIGNS = {"random", "negative", "positive"}
+MIN_LAG_HOURS = 25
 
 
 def load_profile(path: str | Path) -> dict:
@@ -90,6 +102,51 @@ def _errors(p: dict) -> list[str]:
             errors.append(f"incident class {c['id']}: unknown type {c['type']}")
         if not 0 < low <= high:
             errors.append(f"incident class {c['id']}: bad duration_hours")
+        errors += _injection_errors(c, {sensor["id"]: sensor for sensor in p["sensors"]})
+    return errors
+
+
+def _injection_errors(c: dict, sensors: dict) -> list[str]:
+    """The optional injection block of one incident class. A class without it injects nothing."""
+    if "injection" not in c:
+        return []
+    spec = c["injection"]
+    name = f"incident class {c['id']}: injection"
+    if not isinstance(spec, dict):
+        return [f"{name} must be a mapping"]
+    primitive = spec.get("primitive")
+    if primitive not in INJECTION_KEYS:
+        return [f"{name} has unknown primitive {primitive}"]
+    errors = []
+    unknown_keys = set(spec) - INJECTION_KEYS[primitive]
+    if unknown_keys:
+        errors.append(f"{name} of {primitive} has unknown keys {sorted(unknown_keys)}")
+    targets = spec.get("targets")
+    if not isinstance(targets, list) or not targets:
+        errors.append(f"{name} needs a non-empty targets list")
+        targets = []
+    for target in targets:
+        if target not in sensors:
+            errors.append(f"{name} has unknown target sensor {target}")
+        elif primitive == "scale_relation" and "follows" not in sensors[target]:
+            errors.append(f"{name} scale_relation needs a target with follows, not {target}")
+        elif primitive == "command_override" and "follows" in sensors[target]:
+            errors.append(f"{name} command_override needs a target without follows, not {target}")
+    if "magnitude" in INJECTION_KEYS[primitive]:
+        pair = spec.get("magnitude")
+        if not (
+            isinstance(pair, list | tuple)
+            and len(pair) == 2
+            and all(map(_is_finite, pair))
+            and 0 < pair[0] <= pair[1]
+        ):
+            errors.append(f"{name} magnitude must be [low, high], finite and 0 < low <= high")
+        if spec.get("sign", "random") not in INJECTION_SIGNS:
+            errors.append(f"{name} sign must be one of {sorted(INJECTION_SIGNS)}")
+    if primitive == "replay":
+        bound = spec.get("max_lag_hours")
+        if not isinstance(bound, int) or isinstance(bound, bool) or bound < MIN_LAG_HOURS:
+            errors.append(f"{name} max_lag_hours must be a whole number >= {MIN_LAG_HOURS}")
     return errors
 
 
