@@ -13,8 +13,9 @@ from plantmon.core.migrate import MigrationError, migrate
 from plantmon.core.profile import load_profile
 from plantmon.core.quality import run_checks
 from plantmon.core.store import connect, count_rows, read_series, replace_run
+from plantmon.sim.inject import simulate_run
 from plantmon.sim.schedule import anomalous_share, generate_schedule, validate_schedule
-from plantmon.sim.signals import context_states, simulate, split_bounds, timestamps
+from plantmon.sim.signals import context_states, split_bounds, timestamps
 
 CHART_PATH = Path("data/generated/chart.png")
 CHART_DAYS = 14
@@ -35,7 +36,9 @@ def demo(profile_id: str, seed: int) -> int:
         return 1
 
     times = timestamps(profile)
-    values = simulate(profile, seed).reported
+    values = simulate_run(profile, seed, incidents).reported
+    injectable = {c["id"] for c in profile["incident_classes"] if "injection" in c}
+    injected = sum(i.class_id in injectable for i in incidents)
     states = context_states(profile, times)
     with connect() as conn:
         try:
@@ -61,6 +64,7 @@ def demo(profile_id: str, seed: int) -> int:
     print(f"All data is simulated. Profile {profile_id}, seed {seed}, run_id {run_id}.")
     print(f"Samples per sensor: {len(times)}. Sensors: {len(values)}.")
     print(f"Rows stored: {stored}")
+    print(f"Incidents injected: {injected} of {len(incidents)}")
     for check in checks:
         status = "passed" if check.passed else "FAILED"
         print(f"Data quality {check.check_id}: {status}, violations {check.violations}")
