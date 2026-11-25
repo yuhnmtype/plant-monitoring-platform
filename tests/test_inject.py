@@ -2,17 +2,24 @@
 
 Sensors: a is a constant source (10) with measurement noise, b = 5 + 2a, c = 100 + b without
 noise, d is an independent noisy signal. So the expected injected values can be worked out by hand.
+
+The last section runs on the repo's own profiles, found by folder, so no profile is named here.
 """
 
+import hashlib
+import re
 import subprocess
 import sys
 import types
+from contextlib import nullcontext
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import numpy as np
 import pytest
 
+import plantmon.__main__ as demo_module
+from plantmon.core.migrate import migrate
 from plantmon.core.profile import load_profile, validate_profile
 from plantmon.sim.inject import sigma_s, simulate_run, valid_replay_lags
 from plantmon.sim.schedule import Incident, generate_schedule, validate_schedule
@@ -332,33 +339,6 @@ def test_injection_off_equals_the_clean_run():
     assert not np.array_equal(clean.reported["d"], injected.reported["d"])
 
 
-@pytest.mark.parametrize(
-    "path", sorted(Path("profiles").glob("*/profile.yaml")), ids=lambda p: p.parent.name
-)
-def test_injection_off_equals_the_output_before_injection_existed(path, monkeypatch):
-    """Run the simulator of the last commit without injection next to today's, same machine."""
-    try:
-        shown = subprocess.run(
-            ["git", "show", f"{BEFORE_INJECTION}:src/plantmon/sim/signals.py"],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-        )
-    except FileNotFoundError:
-        pytest.skip("git is not installed, so the earlier simulator cannot be read")
-    if shown.returncode:
-        pytest.skip(f"commit {BEFORE_INJECTION} is not in this clone")
-    before = types.ModuleType("signals_before_injection")
-    monkeypatch.setitem(sys.modules, before.__name__, before)  # dataclass looks it up
-    exec(compile(shown.stdout, before.__name__, "exec"), before.__dict__)
-
-    profile = load_profile(path)
-    old = before.simulate(profile, 42)
-    new = simulate_run(profile, 42, generate_schedule(profile, 42), injection=False)
-    assert before.timestamps(profile) == timestamps(profile)
-    _assert_unchanged(old, new, [s["id"] for s in profile["sensors"]])
-
-
 def _block(**changes) -> dict:
     block = {"primitive": "step_offset", "targets": ["d"], "magnitude": [2, 6]}
     block.update(changes)
@@ -395,3 +375,165 @@ def test_loader_rejects_a_bad_injection_block(block, message):
     profile["incident_classes"][0]["injection"] = block
     with pytest.raises(ValueError, match=message):
         validate_profile(profile)
+
+
+# ---- the repo's own profiles ----
+
+PROFILE_PATHS = sorted(Path("profiles").glob("*/profile.yaml"))
+
+
+def _injects(path) -> bool:
+    return any("injection" in c for c in load_profile(path)["incident_classes"])
+
+
+INJECTED_PATHS = [path for path in PROFILE_PATHS if _injects(path)]
+
+
+def _by_folder(path):
+    return path.parent.name
+
+
+def _signals_before_injection(monkeypatch):
+    """Return the simulator module of the last commit without injection, read from git."""
+    try:
+        shown = subprocess.run(
+            ["git", "show", f"{BEFORE_INJECTION}:src/plantmon/sim/signals.py"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+    except FileNotFoundError:
+        pytest.skip("git is not installed, so the earlier simulator cannot be read")
+    if shown.returncode:
+        pytest.skip(f"commit {BEFORE_INJECTION} is not in this clone")
+    before = types.ModuleType("signals_before_injection")
+    monkeypatch.setitem(sys.modules, before.__name__, before)  # dataclass looks it up
+    exec(compile(shown.stdout, before.__name__, "exec"), before.__dict__)
+    return before
+
+
+def test_at_least_one_repo_profile_injects():
+    assert INJECTED_PATHS
+
+
+@pytest.mark.parametrize("path", PROFILE_PATHS, ids=_by_folder)
+def test_injection_off_equals_the_output_before_injection_existed(path, monkeypatch):
+    """Run the simulator of the last commit without injection next to today's, same machine."""
+    before = _signals_before_injection(monkeypatch)
+    profile = load_profile(path)
+    old = before.simulate(profile, 42)
+    new = simulate_run(profile, 42, generate_schedule(profile, 42), injection=False)
+    assert before.timestamps(profile) == timestamps(profile)
+    _assert_unchanged(old, new, [s["id"] for s in profile["sensors"]])
+
+
+@pytest.mark.parametrize("path", INJECTED_PATHS, ids=_by_folder)
+def test_every_incident_has_a_valid_replay_lag_for_the_five_seeds(path):
+    profile = load_profile(path)
+    (bound,) = [
+        c["injection"]["max_lag_hours"]
+        for c in profile["incident_classes"]
+        if c.get("injection", {}).get("primitive") == "replay"
+    ]
+    assert bound == 168  # changing it is Huy's decision (docs/specs/m3.md), not a test fix
+    failures = []
+    for seed in range(42, 47):
+        incidents = generate_schedule(profile, seed)
+        failures += [
+            f"seed {seed}: {i.class_id} at {i.start} ({i.split})"
+            for i in incidents
+            if not valid_replay_lags(profile, i, incidents, bound)
+        ]
+    assert not failures, "no valid replay lag:\n" + "\n".join(failures)
+
+
+def _reference():
+    """The seed-42 regression reference, read from the M2 spec: its only home."""
+    text = Path("docs/specs/m2.md").read_text(encoding="utf-8")
+    section = text.split("## Regression reference")[1].split("\n## ")[0]
+    profile_id, seed = re.search(r"--profile (\w+) --seed (\d+)", section).groups()
+    row = r"^\| (readings|incident schedule) \| \d+ \| `([0-9a-f]{64})` \|"
+    return profile_id, int(seed), dict(re.findall(row, section, re.MULTILINE))
+
+
+def _reference_run():
+    profile_id, seed, expected = _reference()
+    profile = load_profile(Path("profiles") / profile_id / "profile.yaml")
+    return profile, seed, generate_schedule(profile, seed), expected
+
+
+def _digest(lines) -> str:
+    return hashlib.sha256("".join(line + "\n" for line in lines).encode("utf-8")).hexdigest()
+
+
+def _readings_digest(profile, reported) -> str:
+    """The line format of the M2 spec, taken from the arrays that would be stored."""
+    times = timestamps(profile)
+    return _digest(
+        f"{sensor_id},{ts.isoformat()},{value!r}"
+        for sensor_id in sorted(reported)
+        for ts, value in zip(times, reported[sensor_id].tolist())
+    )
+
+
+def test_the_schedule_equals_the_regression_reference():
+    _, _, incidents, expected = _reference_run()
+    lines = (
+        f"{i.class_id},{i.incident_type},{i.split},{i.start.isoformat()},{i.end.isoformat()}"
+        for i in sorted(incidents, key=lambda i: i.start)
+    )
+    assert _digest(lines) == expected["incident schedule"]
+
+
+@pytest.mark.skipif(
+    sys.platform != "win32",
+    reason="the readings hash was recorded on Windows and is a same-machine reference (m2.md)",
+)
+def test_readings_with_injection_off_equal_the_regression_reference():
+    profile, seed, incidents, expected = _reference_run()
+    off = simulate_run(profile, seed, incidents, injection=False)
+    assert _readings_digest(profile, off.reported) == expected["readings"]
+    on = simulate_run(profile, seed, incidents)
+    assert _readings_digest(profile, on.reported) != expected["readings"]
+
+
+@pytest.mark.parametrize("path", PROFILE_PATHS, ids=_by_folder)
+def test_a_demo_run_stores_the_injected_readings_and_the_schedule(
+    path, db, monkeypatch, tmp_path, capsys
+):
+    before = _signals_before_injection(monkeypatch)  # reads git, so before subprocess is patched
+    migrate(db)
+    monkeypatch.setattr(demo_module.subprocess, "run", lambda *a, **k: None)
+    monkeypatch.setattr(demo_module, "connect", lambda: nullcontext(db))
+    monkeypatch.setattr(demo_module, "CHART_PATH", tmp_path / "chart.png")
+    assert demo_module.demo(path.parent.name, 42) == 0
+
+    profile = load_profile(path)
+    incidents = generate_schedule(profile, 42)
+    (run_id,) = db.execute("SELECT run_id FROM runs").fetchone()
+    labels = db.execute(
+        "SELECT class_id, incident_type, split, start_ts, end_ts FROM incident_labels"
+        " WHERE run_id = %s ORDER BY start_ts",
+        (run_id,),
+    ).fetchall()
+    assert labels == [
+        (i.class_id, i.incident_type, i.split, i.start, i.end)
+        for i in sorted(incidents, key=lambda i: i.start)
+    ]
+    checks = db.execute(
+        "SELECT passed, violations FROM dq_results WHERE run_id = %s", (run_id,)
+    ).fetchall()
+    assert checks == [(True, 0)] * 5
+
+    injects = _injects(path)
+    injected = len(incidents) if injects else 0
+    assert f"Incidents injected: {injected} of {len(incidents)}" in capsys.readouterr().out
+    clean = before.simulate(profile, 42).reported
+    expected = simulate_run(profile, 42, incidents).reported if injects else clean
+    assert any(not np.array_equal(clean[s], expected[s]) for s in clean) == injects
+    for sensor_id in clean:
+        stored = db.execute(
+            "SELECT value FROM readings WHERE run_id = %s AND sensor_id = %s ORDER BY ts",
+            (run_id, sensor_id),
+        ).fetchall()
+        assert np.array_equal(np.array([row[0] for row in stored]), expected[sensor_id])

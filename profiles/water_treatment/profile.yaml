@@ -85,12 +85,44 @@ incident_schedule:
   # Keeps one alarm from spanning two incidents, which would inflate recall (criteria section 5).
   min_gap_hours: 24
 
-# Patterns are in docs/problem-brief.md section 4. Injection targets are added in M3.
+# Patterns are in docs/problem-brief.md section 4.
+# injection: how a class changes the simulated signals (docs/specs/m3.md). Every value is
+# approved by Huy on 2026-11-25 and frozen by the tag m3-injection-frozen. magnitude is in
+# multiples of the target's sigma_s; targets: one is drawn per incident, except replay, which
+# copies all of them.
 incident_classes:
-  - {id: sensor_drift, type: fault, duration_hours: [2, 8]}
-  - {id: stuck_sensor, type: fault, duration_hours: [2, 8]}
-  - {id: weak_pump, type: fault, duration_hours: [2, 8]}
-  - {id: valve_fault, type: fault, duration_hours: [2, 8]}
-  - {id: manipulated_readings, type: attack, duration_hours: [2, 8]}
-  - {id: manipulated_commands, type: attack, duration_hours: [2, 8]}
-  - {id: replayed_data, type: attack, duration_hours: [2, 8]}
+  - id: sensor_drift
+    type: fault
+    duration_hours: [2, 8]
+    injection: {primitive: slope, targets: [pump_command, pump_flow, pump_pressure, valve_position, outlet_flow, tank_level],
+                magnitude: [3, 6], sign: random}
+  - id: stuck_sensor
+    type: fault
+    duration_hours: [2, 8]
+    injection: {primitive: hold, targets: [pump_command, pump_flow, pump_pressure, valve_position, outlet_flow, tank_level]}
+  - id: weak_pump
+    type: fault
+    duration_hours: [2, 8]
+    injection: {primitive: scale_relation, targets: [pump_flow, pump_pressure],
+                magnitude: [3, 6], sign: negative}
+  - id: valve_fault
+    type: fault
+    duration_hours: [2, 8]
+    injection: {primitive: scale_relation, targets: [outlet_flow],
+                magnitude: [3, 6], sign: random}
+  - id: manipulated_readings
+    type: attack
+    duration_hours: [2, 8]
+    injection: {primitive: step_offset,
+                targets: [pump_command, pump_flow, pump_pressure, valve_position, outlet_flow],
+                magnitude: [3, 6], sign: random}
+  - id: manipulated_commands
+    type: attack
+    duration_hours: [2, 8]
+    injection: {primitive: command_override,
+                targets: [pump_command, valve_position], magnitude: [3, 6], sign: random}
+  - id: replayed_data
+    type: attack
+    duration_hours: [2, 8]
+    injection: {primitive: replay, targets: [pump_command, pump_flow, pump_pressure, valve_position, outlet_flow, tank_level],
+                max_lag_hours: 168}
